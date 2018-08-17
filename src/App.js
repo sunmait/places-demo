@@ -1,5 +1,5 @@
+/* eslint-disable no-undef */
 import React, { Component } from 'react';
-import { getNearbyPlaces, GOOGLE_API_KEY } from './requests';
 import './App.css';
 
 class App extends Component {
@@ -11,7 +11,7 @@ class App extends Component {
       lng: '',
       radius: '',
       places: [],
-      nextPageToken: '',
+      goToNextPage: null,
     };
   }
 
@@ -21,21 +21,28 @@ class App extends Component {
 
   handleSearchPlaces = async () => {
     const { lat, lng, radius } = this.state;
-    const query = {
-      location: `${lat},${lng}`,
+    const location = new google.maps.LatLng(lat, lng);
+    const request = {
+      location,
       radius,
     };
-    const res = await getNearbyPlaces(query);
-    this.setState({ places: res.results, nextPageToken: res.next_page_token });
+    const map = new google.maps.Map(document.getElementById('map'), {
+      center: location,
+      zoom: 15
+    });
+    const service = new google.maps.places.PlacesService(map);
+    service.nearbySearch(request, this.handleNearbySearchCallback);
   };
 
-  loadMorePlaces = async () => {
-    const { nextPageToken, places } = this.state;
-    const query = {
-      pagetoken: nextPageToken,
-    };
-    const res = await getNearbyPlaces(query);
-    this.setState({ places: [...places, ...res.results], nextPageToken: res.next_page_token });
+  handleNearbySearchCallback = (results, status, pagination) => {
+    if (status !== 'OK') return;
+
+    const { places } = this.state;
+
+    const goToNextPage = pagination.hasNextPage ? () => {
+      pagination.nextPage();
+    } : null;
+    this.setState({  places: [...places, ...results], goToNextPage });
   };
 
   renderPlaceCard = (place) => {
@@ -53,7 +60,7 @@ class App extends Component {
             </div>
             <div className="field-container">
               <span className="field-name">Location: </span>
-              <span className="field-value">{`${place.geometry.location.lat} ${place.geometry.location.lng}`}</span>
+              <span className="field-value">{`${place.geometry.location.lat()} ${place.geometry.location.lng()}`}</span>
             </div>
             <div className="field-container">
               <span className="field-name">Rating: </span>
@@ -65,7 +72,7 @@ class App extends Component {
             </div>
           </div>
           {place.photos && (
-            <img src={`https://maps.googleapis.com/maps/api/place/photo?key=${GOOGLE_API_KEY}&maxwidth=300&photoreference=${place.photos[0].photo_reference}`} />
+            <img src={place.photos[0].getUrl({ 'maxWidth': 300 })} />
           )}
         </div>
       </div>
@@ -105,10 +112,11 @@ class App extends Component {
             Find
           </div>
         </div>
+        <div id="map" />
         <div className="content">
           {this.state.places.map(this.renderPlaceCard)}
-          {this.state.nextPageToken && (
-            <div className="button" onClick={this.loadMorePlaces}>
+          {this.state.goToNextPage && (
+            <div className="button" onClick={this.state.goToNextPage}>
               Load more
             </div>
           )}
